@@ -3,6 +3,9 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
+import cv2
+import numpy as np
 import time
 import random
 from collections import deque
@@ -37,6 +40,8 @@ class RandomCameraDelayNode(Node):
         self.timer = self.create_timer(0.01, self.publish_delayed_message)
         self.delay_change_timer = self.create_timer(self.change_delay_interval_sec, self.update_delay)
 
+        self.bridge = CvBridge()
+
         self.get_logger().info(f'Random camera delay node started with random delays between {self.min_delay_ms} and {self.max_delay_ms} ms.')
         self.get_logger().info(f'Change delay every {self.change_delay_interval_sec} seconds.')
 
@@ -57,8 +62,29 @@ class RandomCameraDelayNode(Node):
         current_time = time.monotonic()
         while self.queue and (current_time >= self.queue[0][0]):
             _, msg = self.queue.popleft()
-            self.publisher.publish(msg)
-            self.get_logger().info(f'Published message with delay at {time.monotonic() - current_time:.2f} seconds')
+            try:
+                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+                overlay_image = self.add_delay_bar(cv_image)
+                overlay_image_msg = self.bridge.cv2_to_imgmsg(overlay_image, encoding='bgr8')
+                self.publisher.publish(overlay_image_msg)
+            except CvBridgeError as e:
+                self.get_logger().info('Failed to convert and publish image: %s' % str(e))
+
+    def add_delay_bar(self, image):
+        delay_percentage = (self.current_delay * 1000 - self.min_delay_ms) / (self.max_delay_ms - self.min_delay_ms)
+        height, width, _ = image.shape
+        bar_width = 50
+        bar_height = int(height * delay_percentage)
+
+        bar = np.zeros((height, bar_width, 3), dtype=np.uint8)
+        bar[height - bar_height:, :] = [0, 0, 255]  # Red color for the bar
+
+        # Add delay text
+        cv2.putText(image, f'{self.current_delay * 1000:.2f} ms', (width - bar_width - 150, height - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+
+        overlay_image = np.hstack((image, bar))
+        return overlay_image
 
 def main(args=None):
     rclpy.init(args=args)

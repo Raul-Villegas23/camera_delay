@@ -22,7 +22,8 @@ setup(
         'console_scripts': [
             'camera_delay_node = camera_delay.camera_delay_node:main',
             'random_camera_delay_node = camera_delay.random_camera_delay_node:main ',
-            'stereo_image_publisher = camera_delay.stereo_image_publisher:main'
+            'stereo_image_publisher = camera_delay.stereo_image_publisher:main',
+            'predictive_display_node = camera_delay.predictive_display_node:main'
         ],
     },
 )
